@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with My AI chatbot</title>
+    <style>
+        /* Basic Chat UI CSS (See CSS section below) */
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; }
+
+        /* Chat Title Styling */
+        .page-title {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Professional-looking font */
+            font-size: 3em; /* Big font size */
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .chat-container { width: 90%; max-width: 600px; background-color: #fff; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); border-radius: 8px; display: flex; flex-direction: column; height: 70vh; overflow: hidden; }
+        .chat-messages { flex-grow: 1; padding: 20px; overflow-y: auto; scroll-behavior: smooth; }
+        .message { display: flex; margin-bottom: 15px; }
+        .message.user .message-bubble { background-color: #dcf8c6; align-self: flex-end; }
+        .message.assistant .message-bubble { background-color: #e0e0e0; align-self: flex-start; }
+        .message-bubble { max-width: 75%; padding: 10px 15px; border-radius: 20px; word-wrap: break-word; }
+        .chat-input { display: flex; padding: 15px; border-top: 1px solid #eee; }
+        .chat-input input { flex-grow: 1; padding: 10px; border: 1px solid #ddd; border-radius: 20px; margin-right: 10px; outline: none; }
+        .chat-input button { background-color: #4CAF50; color: white; border: none; border-radius: 20px; padding: 10px 15px; cursor: pointer; transition: background-color 0.3s ease; }
+        .chat-input button:hover { background-color: #45a049; }
+        .loading-indicator { text-align: center; padding: 10px; color: #888; font-style: italic; }
+
+        /* Basic Markdown Styling (optional, but recommended for readability) */
+        .message-bubble pre {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap; /* Allows long lines to wrap */
+            word-break: break-all; /* Breaks long words if needed */
+        }
+        .message-bubble code {
+            font-family: monospace;
+            background-color: #e9e9e9;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .message-bubble p {
+            margin-top: 0;
+            margin-bottom: 1em;
+        }
+        .message-bubble ul, .message-bubble ol {
+            margin-top: 0;
+            margin-bottom: 1em;
+            padding-left: 20px;
+        }
+        .message-bubble h1, .message-bubble h2, .message-bubble h3,
+        .message-bubble h4, .message-bubble h5, .message-bubble h6 {
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+
+        /* conversationId display styling */
+        .conversation-id-display {
+            margin-top: 15px;
+            font-family: 'Courier New', Courier, monospace; /* Courier type font */
+            font-size: 0.8em; /* Small font size */
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-title">My AI chatbot</div>
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+            <div class="message assistant">
+                <div class="message-bubble">Hello! I am My AI chatbot, ask your question...</div>
+            </div>
+        </div>
+        <div class="loading-indicator" id="loading-indicator" style="display: none;">
+            My AI chatbot is typing...
+        </div>
+        <div class="chat-input">
+            <input type="text" id="user-question" placeholder="Ask a question...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+    <div id="conversation-id-display" class="conversation-id-display"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script>
+        // Function to generate a random 8-digit hexadecimal string
+        function generateHexId(length) {
+            let result = '';
+            const characters = '0123456789abcdef';
+            const charactersLength = characters.length;
+            for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * charactersLength));
+            }
+            return result;
+        }
+
+        // Generate conversationId on page load
+        const conversationId = generateHexId(8); //
+
+        // Display conversationId at the bottom of the page
+        document.getElementById('conversation-id-display').textContent = `conversationId : ${conversationId}`; //
+
+        // JavaScript logic
+        const chatMessages = document.getElementById('chat-messages');
+        const userQuestionInput = document.getElementById('user-question');
+        const sendButton = document.getElementById('send-button');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        // Construct the endpoint using the generated conversationId
+        const endpoint = `http://localhost:8080/chat/${conversationId}/ask`; // API endpoint
+
+        async function sendMessage() {
+            const question = userQuestionInput.value.trim();
+            if (!question) return;
+
+            // Add user message (no markdown parsing for user input typically)
+            addMessageToChat(question, 'user', false);
+
+            userQuestionInput.value = ''; // Clear input
+
+            loadingIndicator.style.display = 'block'; // Show typing indicator
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to bottom
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                // Add assistant message, now with Markdown parsing
+                addMessageToChat(data.answer, 'assistant', true);
+
+            } catch (error) {
+                console.error('Error fetching response:', error);
+                addMessageToChat('Sorry, I am unable to connect to My AI chatbot right now. Please try again later.', 'assistant', false);
+            } finally {
+                loadingIndicator.style.display = 'none'; // Hide typing indicator
+                chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to bottom after response
+            }
+        }
+
+        function addMessageToChat(text, sender, isMarkdown = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender);
+
+            const messageBubble = document.createElement('div');
+            messageBubble.classList.add('message-bubble');
+
+            if (isMarkdown) {
+                // Use marked.parse() to convert Markdown to HTML
+                messageBubble.innerHTML = marked.parse(text);
+            } else {
+                // For plain text, use textContent to prevent XSS
+                messageBubble.textContent = text;
+            }
+
+            messageDiv.appendChild(messageBubble);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll to latest message
+        }
+
+        // Event Listeners
+        sendButton.addEventListener('click', sendMessage);
+        userQuestionInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
